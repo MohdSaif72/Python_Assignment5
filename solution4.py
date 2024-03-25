@@ -1,5 +1,4 @@
-from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter
+import pandas as pd
 
 def new_sheet(filepath, sheetname, columnheaders):
     """
@@ -11,17 +10,14 @@ def new_sheet(filepath, sheetname, columnheaders):
     - columnheaders (list): List of column headers to be added to the new sheet.
     """
     try:
-        wb = load_workbook(filename=filepath)
-        if sheetname in wb.sheetnames:
+        xl = pd.ExcelFile(filepath)
+        if sheetname in xl.sheet_names:
             return
+        df = pd.DataFrame(columns=columnheaders)
         
-        new_sheet = wb.create_sheet(title=sheetname)
-        
-        for col_idx, header in enumerate(columnheaders, start=1):
-            column_letter = get_column_letter(col_idx)
-            new_sheet[f"{column_letter}1"] = header
-        
-        wb.save(filename=filepath)
+        with pd.ExcelWriter(filepath, mode='a', engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name=sheetname, index=False)
+
     except Exception as e:
         print(f"An error occurred: {e}")
 
