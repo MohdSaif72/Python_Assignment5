@@ -1,101 +1,120 @@
-"""Openpyxl is a Python library for reading and writing Excel files. 
+"""
+Description:
+This script defines a OrderPlacer class to manage user login and order placement.
+
+Classes:
+- OrderPlacer: Manages user login and place order according to data.
+
+Functions/Methods:
+- __init__: Initializes the LoginManager class with URL, filename, and browser manager.
+- place_orders: Perform user login, place order, check criteria for success/failure and store data
+in excel sheet.
 """
 import openpyxl
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-import time 
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from checkout import Checkout
+from login import Login
+from browser import BrowserManager
 
-class Order:
+class OrderPlacer:                    
     """
-    A class to place orders using data from an Excel file.
+    A class to place orders on a website using Selenium WebDriver.
 
     Attributes:
-    - filename (str): The name of the Excel file containing order details.
-    - website_url (str): The URL of the website to place orders on.
+        filename (str): The name of the Excel file containing order details.
+        url (str): The URL of the website to place orders on.
+        browser_manager: An instance of the browser manager to handle WebDriver operations.
     """
-
-    def __init__(self, filename, url):
-        self.filename = filename
+    def __init__(self,filename,url,browser_manager):
+        self.driver = webdriver.Chrome()
         self.url = url
+        self.filename = filename
+        self.browser_manager = browser_manager
 
-    def orders(self):
+    def place_orders(self):      
         """
-        Places orders based on data from the specified Excel file.
+        Method to place orders based on data from an Excel file.
+
+        This method iterates through rows in the Excel file, logs in, adds products to cart,
+        fills in checkout information, and updates order status in the Excel file.
         """
         try:
             workbook = openpyxl.load_workbook(self.filename)
-            print("Sheet names:", workbook.sheetnames)
             order_sheet = workbook["Order Details"]
-            order_sheet["E1"] = "Order Status"  
-            rows = order_sheet.iter_rows(min_row=2, values_only=True)
-            if rows is None:
-                print("No rows found in the worksheet.")
-                return
+            order_sheet["E1"] = "Order Status"
 
-            # Iterate over each row
-            for row_index, row in enumerate(rows, start=1):
-                username, product_name, quantity, *_ = row
+            row_index = 2  # Start from the second row where data begins
 
-                driver = webdriver.Chrome()
+            for row in order_sheet.iter_rows(min_row=row_index, values_only=True):
+                username, product, quantity, price, *_ = row
+                print(username,product,quantity,price)
 
-                try:
-                    driver.get(self.url)  
-                    print("Opened website successfully")
-                    
-                    # Locate elements for login
-                    username_field = driver.find_element(By.ID, "user-name")
-                    password_field = driver.find_element(By.ID, "password")
-                    login_button = driver.find_element(By.CLASS_NAME, "btn_action")
+                self.browser_manager.setup_browser(self.url)
+                self.browser_manager.driver.implicitly_wait(3)
 
-                    username_field.send_keys(username)
-                    password_field.send_keys("secret_sauce")
-                    login_button.click()
-                    print("Logged in successfully")
-                    
-                    driver.implicitly_wait(5)
-                    time.sleep(3)
+                login_manager = Login(self.browser_manager,username,"secret_sauce")
+                login_manager.login()
 
-                    # Add product to cart
-                    product = driver.find_element(By.XPATH, f"//*[text()='{product_name}']/../../..")
-                    add_to_cart_button = product.find_element(By.CLASS_NAME, "btn_inventory")
-                    add_to_cart_button.click()
-                    print("Product added to cart successfully")
-                    time.sleep(3)
+                self.browser_manager.driver.implicitly_wait(3)
 
-                    # Verify if product added to cart successfully
-                    try:
-                        cart_icon = driver.find_element(By.XPATH, "//a[@class='shopping_cart_link fa-layers fa-fw']")
-                        cart_icon.click()
-                    except Exception as e:
-                        print("Error occurred while retrieving cart count:", e)
-                        continue  # Skip to the next iteration if there's an error
+                product_element = self.browser_manager.driver.find_element(By.XPATH, f"//*[text()='{product}']/../../..") #pylint: disable=C0301
 
-                    # Retrieve the product name from the cart
-                    try:
-                        cart_product_name = driver.find_element(By.XPATH, "//*[@id='item_4_title_link']/div").text
-                        print("Product name in cart:", cart_product_name)
-                    except Exception as e:
-                        print("Error occurred while retrieving product name from cart:", e)
-                        continue  # Skip to the next iteration if there's an error
+                add_to_cart_button = product_element.find_element(By.CLASS_NAME, "btn_inventory")
+                add_to_cart_button.click()
+                self.browser_manager.driver.implicitly_wait(5)
 
-                    # Compare the product name in the cart with the expected product name
-                    if cart_product_name == product_name:
-                        order_sheet.cell(row=order_sheet.min_row + row_index - 1, column=5, value="Success")  # Update status in the last column for the current row
-                        print("Order status updated to Success")
-                    else:
-                        order_sheet.cell(row=order_sheet.min_row + row_index - 1, column=5, value="Failure")  # Update status in the last column for the current row
+                cart_icon = WebDriverWait(self.browser_manager.driver, 10).until(EC.element_to_be_clickable((By.CLASS_NAME, "shopping_cart_container"))) #pylint: disable=C0301
+                cart_icon.click()
+                self.browser_manager.driver.implicitly_wait(5)
+                product_in_cart = self.browser_manager.driver.find_element(By.XPATH,"//div[@class='inventory_item_name']").text     #pylint: disable=C0301
+                total_cost_in_cart = float(self.browser_manager.driver.find_element(By.CLASS_NAME,"inventory_item_price").text)     #pylint: disable=C0301
+                # price = float(price)
+
+                cart_quantity = self.browser_manager.driver.find_element(By.CLASS_NAME, "cart_quantity")    #pylint: disable=C0301
+                cart_count = int(cart_quantity.text)
+                print("Cart count:", cart_count)
+
+                checkout_button = self.browser_manager.driver.find_element(By.CLASS_NAME, "checkout_button")    #pylint: disable=C0301
+                checkout_button.click()
+
+                checkout_manager = Checkout(self.browser_manager)
+                checkout_manager.personal_info()
+
+                continue_button = self.browser_manager.driver.find_element(By.CLASS_NAME, "cart_button")    #pylint: disable=C0301
+                continue_button.click()
+
+                finish_button = self.browser_manager.driver.find_element(By.CLASS_NAME, "cart_button")  #pylint: disable=C0301
+                finish_button.click()
+
+                cart_icon2 = WebDriverWait(self.browser_manager.driver, 10).until(EC.element_to_be_clickable((By.CLASS_NAME, "shopping_cart_container"))) #pylint: disable=C0301
+                cart_icon2.click()
+                cart_items = self.browser_manager.driver.find_elements(By.CLASS_NAME, "inventory_item_name")        #pylint: disable=C0301
+                item_still_in_cart = any(product in item.text for item in cart_items)
+
+                print(product_in_cart)
+                if cart_count == int(quantity) and product_in_cart == product and total_cost_in_cart == float(price):  #pylint: disable=C0301
+                    if item_still_in_cart:
+                        order_sheet.cell(row=row_index, column=5, value="Failure")
                         print("Order status updated to Failure")
+                    else:
+                        order_sheet.cell(row=row_index, column=5, value="Success")
+                        print("Order status updated to Success")
 
-                finally:
-                    workbook.save(self.filename)
-                    print("Excel file saved successfully")
-                    driver.quit()  
+                workbook.save(self.filename)
+                self.browser_manager.driver.implicitly_wait(5)
+                row_index += 1
+            print("All orders placed successfully!")
 
-        except Exception as e:
-            print("An error occurred:", e)
+        finally:
+            self.driver.quit()
 
-# Call place_orders function with provided filename and website URL
 filename = "saucedemo.xlsx"
-website_url = "https://www.saucedemo.com/v1/"
-order_placer = Order(filename, website_url)
-order_placer.orders()
+url = "https://www.saucedemo.com/v1/"
+browser_manager = BrowserManager()
+order_placer = OrderPlacer(filename, url, browser_manager)
+
+# Run the place_orders method to start placing orders
+order_placer.place_orders()
