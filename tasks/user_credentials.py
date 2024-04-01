@@ -1,32 +1,44 @@
 """
-The selenium package is used to automate web browser interaction.
+Description:
+This script defines a Credentials class to retrieve user credentials from a web page
+and save them to an Excel file. It utilizes a BrowserManager instance to control the web browser
+and extracts user IDs, names, and passwords from specific elements on the page.
+
+Classes:
+- Credentials: Manages the retrieval and storage of user credentials.
+
+Functions/Methods:
+- __init__: Initializes the Credentials class with URL, filename, and browser manager.
+- user_credentials: Retrieves user credentials from the web page and saves them to an
+Excel file.
 """
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 import openpyxl
 
 class Credentials:
-      """
-        Initialize the Credentials class with the specified URL and filename for retrieving user credentials.
-        
-        Parameters:
-        url (str): The URL of the website from which to retrieve credentials.
-        filename (str): The name of the Excel file to save the credentials to.
-        """
-      def __init__(self, url, filename):
+    """
+    Initialize the Credentials class with the specified URL and filename for retrieving user credentials.
+
+    Parameters:
+    url (str): The URL of the website from which to retrieve credentials.
+    filename (str): The name of the Excel file to save the credentials to.
+    browser_manager: An instance of BrowserManager to control the web browser.
+    """
+
+    def __init__(self, url, filename, browser_manager):
         self.url = url
         self.filename = filename
-        self.driver = webdriver.Chrome()
+        self.browser_manager = browser_manager
 
-      def user_credentials(self):
+    def user_credentials(self):
         """This method retrieves user credentials from the specified website
-           and saves them to the Excel file.
+        and saves them to the Excel file.
         """
         try:
-            self.driver.get(self.url)
-
-            users = self.driver.find_elements(By.CLASS_NAME, "login_credentials")
-            passwords = self.driver.find_elements(By.CLASS_NAME, "login_password")
+            self.browser_manager.setup_browser(self.url)
+            self.browser_manager.driver.implicitly_wait(3)
+            users = self.browser_manager.driver.find_elements(By.CLASS_NAME, "login_credentials")
+            passwords = self.browser_manager.driver.find_elements(By.CLASS_NAME, "login_password")
 
             workbook = openpyxl.Workbook()
             credentials_sheet = workbook.create_sheet("User credentials")
@@ -44,4 +56,4 @@ class Credentials:
             workbook.save(self.filename)
 
         finally:
-            self.driver.quit()
+            self.browser_manager.driver.quit()
